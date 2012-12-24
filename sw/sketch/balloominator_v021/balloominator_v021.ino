@@ -68,20 +68,20 @@ void accelSetup()
   digitalWrite(test_led, HIGH);
   delay(10);
   digitalWrite(test_led, LOW);
-
 }
 
 unsigned long start;
 void setup()
 {
   unsigned char i;
-  
+
   pinMode(usb_present, INPUT);
-  
+
   pinMode(cs, OUTPUT);
-  pinMode(test_led, OUTPUT);
   digitalWrite(cs, HIGH);
-  
+
+  pinMode(test_led, OUTPUT);
+
   for (i=0; i<numLEDs; i++)
   {
     pinMode(ledPin[i], OUTPUT);
