@@ -3,13 +3,11 @@
 #include <limits.h>
 #include "ADXL345.h"
 
-#define UPDATE_INTERVAL 100
-#define SCALE_VALUE 0.0003
+#define F_CPU 1000000L
 
 const unsigned char cs = 8;
 const unsigned char READ = 0x80;
 const unsigned char usb_present = A5;
-
 
 ADXL345 accel;
 
@@ -37,9 +35,6 @@ unsigned long last_tap;
 void isr_tap()
 {
   last_tap = millis();
-  digitalWrite(test_led, HIGH);
-  delay(10);
-  digitalWrite(test_led, LOW);
 }
 
 
@@ -60,14 +55,6 @@ void accelSetup()
 
   attachInterrupt(0, isr_tap, RISING);
   attachInterrupt(1, isr_tap, RISING);
-  
-  digitalWrite(test_led, HIGH);
-  delay(10);
-  digitalWrite(test_led, LOW);
-  delay(10);
-  digitalWrite(test_led, HIGH);
-  delay(10);
-  digitalWrite(test_led, LOW);
 }
 
 unsigned long start;
@@ -75,10 +62,17 @@ void setup()
 {
   unsigned char i;
 
+  //unleash full speed
+  CLKPR = (1 << CLKPCE); // enable a change to CLKPR
+  CLKPR = 0; // set the CLKDIV to 0 - was 0011b = div by 8 
+
   pinMode(usb_present, INPUT);
 
   pinMode(cs, OUTPUT);
   digitalWrite(cs, HIGH);
+  SPI.begin();
+  Wire.begin();
+  Serial.begin(57600);
 
   pinMode(test_led, OUTPUT);
 
@@ -95,48 +89,65 @@ void setup()
 
 
 double values[3] = {0.0, 0.0, 0.0};
-#define T_LEN 2560
-#define MAXB 255
+
+#define T_LEN 1280
+#define P_LEN 25600
+#define FLASH_HALF 0.005
+#define MAXB 255.0
+
 void loop()
 {
   unsigned char i;
 
-  unsigned long t = elapsedTime(start);
-  t %= 3*T_LEN;
-  unsigned long t2 = elapsedTime(last_tap);
+  uint16_t t, t_tap;
+  uint8_t p, flash;
+
+  float pow;
+  float ph;
+
+  t = elapsedTime(start);
+  t_tap = elapsedTime(last_tap);
+  
+  Serial.print(t, DEC);
+  Serial.println();
+  p = t % P_LEN;
+  t %= (3 * T_LEN);
   
   //values[0] = 100.0 * sin(t / 900.0);
   //values[1] = 100.0 * cos(t / 900.0);
   //values[2] = 10.0 * exp(-t2);
   
+  //pow = MAXB * (0.5 + 0.3 * sin((PI * p) / P_LEN));
+  flash = MAXB/2 * exp(-FLASH_HALF * t_tap);
+  if (flash > 1) {
+    for (i=0; i<numLEDs; i++)
+      values[i] = flash;
+  }
+
+  pow = MAXB;
+  
   if(t < T_LEN)
   {
-    //round the colour wheel
-    //red up, green 0, blue down
-    values[0] = MAXB*sin(PI*t/(2*T_LEN));
-    values[1] = 0;
-    values[2]= MAXB*cos(PI*t/(2*T_LEN));
+    ph = (PI * t) / (2 * T_LEN);
+    values[0] = pow * sin(ph);
+    values[1] = flash;
+    values[2] = pow * cos(ph);
   }
   else if(t < 2*T_LEN)
   {
-    //round the colour wheel
-    //red down, green up, blue 0
-    t -= T_LEN;
-    values[0] = MAXB*cos(PI*t/(2*T_LEN));
-    values[1] = MAXB*sin(PI*t/(2*T_LEN));
-    values[2] = 0;
+    ph = (PI * (t - T_LEN)) / (2 * T_LEN);
+    values[0] = pow * cos(ph);
+    values[1] = pow * sin(ph);
+    values[2] = flash;
   }
   else 
   {
-    //round the colour wheel
-    //red 0, green down, blue up
-    t -= 2*T_LEN;
-    values[0] = 0;
-    values[1] = MAXB*cos(PI*t/(2*T_LEN));
-    values[2] = MAXB*sin(PI*t/(2*T_LEN));
+    ph = (PI * (t - 2 * T_LEN)) / (2 * T_LEN);
+    values[0] = flash;
+    values[1] = pow * cos(ph);
+    values[2] = pow * sin(ph);
   }
 
   for (i=0; i<numLEDs; i++)
     analogWrite(ledPin[i], round(values[i]));
 }
-
