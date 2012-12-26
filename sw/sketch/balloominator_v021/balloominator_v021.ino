@@ -82,9 +82,20 @@ double values[3] = {0.0, 0.0, 0.0};
 #define FLASH_HALF 0.005
 #define MAXB 255.0
 
+#define XYZ_CHANGE 600.0
+#define SCALE_TO_ILLUM 4.0
+#define MIX_ 0.6
 
 int x, y, z;
-int px, py, pz;
+float px, py, pz;
+
+inline float partial_norm2(int u, float pu)
+{
+  float tmp;
+  tmp = u - pu;
+  return tmp * tmp;
+}
+
 void loop()
 {
   unsigned char i;
@@ -94,6 +105,8 @@ void loop()
 
   float pow;
   float ph;
+  
+  float diff;
 
   t = elapsedTime(start);
   t_tap = elapsedTime(last_tap);
@@ -101,42 +114,42 @@ void loop()
   //pow = t % P_LEN;
   t %= (3 * T_LEN);
   
-  //values[0] = 100.0 * sin(t / 900.0);
-  //values[1] = 100.0 * cos(t / 900.0);
-  //values[2] = 10.0 * exp(-t2);
-  
-  //pow = MAXB * (0.5 + 0.5 * sin(PI * pow / P_LEN));
-
-  //Serial.print(pow, DEC);
-  //Serial.println();
-
-  flash = MAXB/2 * exp(-FLASH_HALF * t_tap);
+  accel.readAccel(&x, &y, &z);
+  diff = partial_norm2(x, px) +
+    partial_norm2(y, py) +
+    partial_norm2(z, pz);
+    
+  if (diff > XYZ_CHANGE)
+    flash = diff / SCALE_TO_ILLUM;
+  else
+    flash = 0;
+    
+  px = MIX_ * px + (1.0 - MIX_) * x;
+  py = MIX_ * py + (1.0 - MIX_) * y;
+  pz = MIX_ * pz + (1.0 - MIX_) * z;
   
   for (i=0; i<numLEDs; i++)
     values[i] = flash;
 
-  pow = 3.0;
+  pow = 100.0;
   
   if(t < T_LEN)
   {
     ph = (PI * t) / (2 * T_LEN);
-    values[0] = pow * sin(ph);
-    values[1] = flash;
-    values[2] = pow * cos(ph);
+    values[0] += pow * sin(ph);
+    values[2] += pow * cos(ph);
   }
   else if(t < 2*T_LEN)
   {
     ph = (PI * (t - T_LEN)) / (2 * T_LEN);
-    values[0] = pow * cos(ph);
-    values[1] = pow * sin(ph);
-    values[2] = flash;
+    values[0] += pow * cos(ph);
+    values[1] += pow * sin(ph);
   }
   else 
   {
     ph = (PI * (t - 2 * T_LEN)) / (2 * T_LEN);
-    values[0] = flash;
-    values[1] = pow * cos(ph);
-    values[2] = pow * sin(ph);
+    values[1] += pow * cos(ph);
+    values[2] += pow * sin(ph);
   }
 
   for (i=0; i<numLEDs; i++)
