@@ -1,15 +1,12 @@
 #include <SPI.h>
-#include <Wire.h>
+#include <ADXL345SPI.h>
 #include <limits.h>
-#include "ADXL345.h"
 
-#define F_CPU 1000000L
-
-const unsigned char cs = 8;
 const unsigned char READ = 0x80;
 const unsigned char usb_present = A5;
 
-ADXL345 accel;
+#define CS 8
+Accelerometer accel(CS);
 
 const unsigned char numLEDs = 3;
 
@@ -21,13 +18,9 @@ unsigned long elapsedTime(unsigned long startTime)
   unsigned long stopTime = millis();
   
   if (stopTime >= startTime)
-  {
     return stopTime - startTime;
-  }
   else
-  {
     return (ULONG_MAX - (startTime - stopTime));
-  }
 }
 
 
@@ -40,8 +33,7 @@ void isr_tap()
 
 void accelSetup()
 {
-  accel.powerOn();
-  delay(10);
+  accel.powerOn(true); //highspeed !
   accel.setRangeSetting(2);
   accel.setInterruptMapping(ADXL345_INT_SINGLE_TAP_BIT, ADXL345_INT2_PIN);
   accel.setTapDetectionOnZ(true);
@@ -62,16 +54,11 @@ void setup()
 {
   unsigned char i;
 
-  //unleash full speed
+  //force unleash full speed
   CLKPR = (1 << CLKPCE); // enable a change to CLKPR
   CLKPR = 0; // set the CLKDIV to 0 - was 0011b = div by 8 
 
   pinMode(usb_present, INPUT);
-
-  pinMode(cs, OUTPUT);
-  digitalWrite(cs, HIGH);
-  SPI.begin();
-  Wire.begin();
   Serial.begin(57600);
 
   pinMode(test_led, OUTPUT);
@@ -91,16 +78,19 @@ void setup()
 double values[3] = {0.0, 0.0, 0.0};
 
 #define T_LEN 1280
-#define P_LEN 25600
+#define P_LEN 10000
 #define FLASH_HALF 0.005
 #define MAXB 255.0
 
+
+int x, y, z;
+int px, py, pz;
 void loop()
 {
   unsigned char i;
 
   uint16_t t, t_tap;
-  uint8_t p, flash;
+  uint8_t flash;
 
   float pow;
   float ph;
@@ -108,23 +98,24 @@ void loop()
   t = elapsedTime(start);
   t_tap = elapsedTime(last_tap);
   
-  Serial.print(t, DEC);
-  Serial.println();
-  p = t % P_LEN;
+  //pow = t % P_LEN;
   t %= (3 * T_LEN);
   
   //values[0] = 100.0 * sin(t / 900.0);
   //values[1] = 100.0 * cos(t / 900.0);
   //values[2] = 10.0 * exp(-t2);
   
-  //pow = MAXB * (0.5 + 0.3 * sin((PI * p) / P_LEN));
-  flash = MAXB/2 * exp(-FLASH_HALF * t_tap);
-  if (flash > 1) {
-    for (i=0; i<numLEDs; i++)
-      values[i] = flash;
-  }
+  //pow = MAXB * (0.5 + 0.5 * sin(PI * pow / P_LEN));
 
-  pow = MAXB;
+  //Serial.print(pow, DEC);
+  //Serial.println();
+
+  flash = MAXB/2 * exp(-FLASH_HALF * t_tap);
+  
+  for (i=0; i<numLEDs; i++)
+    values[i] = flash;
+
+  pow = 3.0;
   
   if(t < T_LEN)
   {
